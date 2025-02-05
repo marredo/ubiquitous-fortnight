@@ -1,0 +1,59 @@
+No Title   |POLVER05_0 |2
+# Adiabatic flash of methanol/ethanol mixture
+# Assume ideal solution, constant heat capacities, constant heats of vaporization
+# University of Colorado Boulder, Department of Chemical and Biological Engineering
+
+#Basis  1 mol feed
+f(xm) = zm - xm*L - ym*V   #mass balance on methanol
+f(xe) = 1 - xm - xe    # liquid mole fractions add to one
+f(Tout) = 1 - ye - ym    # vapor mole fractions add to one
+f(L) =  Hmin + Hein - Hevapout - Hmvapout -Heliqout - Hmliqout     # energy in = energy out
+f(ym) = xm*Pmsat - ym*P     # Raoult's law methanol
+f(ye) =  xe*Pesat - ye*P    # Raoult's law ethanol
+f(V) = 1 - L - V     # overall mass balance
+
+# guess values at outlet
+Tout(0) = 400
+xe(0)= 0.5
+ye(0) = 0.5
+xm(0) = 0.5
+ym(0) = 0.5
+L(0) = 0.5   
+V(0) = 0.5   
+
+#Enthalpy terms
+Hmin =  CPmliq*zm*(Tin-Tr)   # methanol energy in
+Hein = CPeliq*ze*(Tin-Tr)   # ethanol energy in
+Hmliqout = CPmliq*(xm*L)*(Tout -Tr)   # methnol energy out in liquid
+Heliqout = CPeliq*(xe*L)*(Tout-Tr)   #ethanol energy out in liquid
+Hmvapout = DHmvap*(ym*V) + CPmvap*(ym*V)*(Tout -Tr)   # methnol energy out in vapor
+Hevapout =  DHevap*(ye*V) + CPevap*(ye*V)*(Tout-Tr)   #ethanol energy out in vapor
+
+#Explicit equations
+ze = 1 - zm   # feed mole fractions add to one
+Pmsat = 10^(Am-Bm/((Tout-273) + Cm))/750.1 # Saturation pressure methanol- Antoine eqn
+Pesat = 10^(Ae-Be/((Tout-273) + Ce))/750.1  # Saturation pressure ethanol - Antoine eqn
+
+#   Constants
+CPmliq = 110        # heat capacity methanol liquid
+CPeliq = 165        # heat capacity ethanol liquid
+CPmvap = 52       # heat capacity methanol vapor
+CPevap =  80       # heat capacity ethanol vapor
+Tr =  300 # reference temperature
+DHmvap = 35300        # heat of vaporization of methanol
+DHevap =  38600        #heat of vaporization of ethanol
+
+#Antoine constants
+Am = 8.08
+Bm = 1582
+Cm = 240
+Ae = 8.11
+Be = 1593
+Ce = 226
+
+# parameters to be inputted
+zm = 0.30     # mole fraction methanol in feed
+Tin = 423     # feed temperature
+P = 2.0       # outlet pressure
+
+
