@@ -1,252 +1,223 @@
-/***************************************************************
- * createBenzToluene.js
- *
- * Adiabatic flash for benzene (component 1) + toluene (component 2)
- * using a 10-mole feed basis, stepping T by 1°C, and producing
- * a multi-line JSON in the "old solutions" style.
- *
- * WARNING: This can still be quite large, so ensure you
- * have enough memory/disk if you keep small steps.
- *
- ***************************************************************/
-
 const fs = require('fs');
 
-//-------------- 1) Thermo Data for Benzene & Toluene ---------------
-const benzene = {
-  name: 'Benzene',
+//--------- 1) Thermo Data for Cyclohexane & n-Decane -----------
+const cyclohexane = {
+  name: 'Cyclohexane',
   // Antoine constants (°C, mmHg)
-  A: 6.880,
-  B: 1197,
-  C: 219.2,
-
+  A: 6.851,
+  B: 1206,
+  C: 223.1,
   // Heat of vaporization (kJ/mol)
-  Hvap_kJmol: 30.7,
-
-  // Liquid Cp (J/mol·K), approx constant
-  CpL_JmolK: 136,
-
-  // Vapor Cp polynomial: A + B*T + C*T^2 + D*T^3
-  // from your data: A=-3.39E+01, B=4.74E-01, C=-3.02E-04, D=7.13E-08
+  Hvap_kJmol: 30.8,
+  // Liquid Cp (J/mol·K)
+  CpL_JmolK: 156,
+  // Vapor Cp polynomial (T in K): A + B*T + C*T^2 + D*T^3
   cpV_JmolK(T) {
-    const A=-3.39e+01, B=4.74e-01, C=-3.02e-04, D=7.13e-08;
-    return A + B*T + C*T**2 + D*T**3;  // J/mol·K
-  }
-};
-
-const toluene = {
-  name: 'Toluene',
-  A: 6.951,
-  B: 1342,
-  C: 219.2,
-
-  Hvap_kJmol: 51.0,
-  CpL_JmolK: 157,
-
-  // Vapor polynomial from your snippet:
-  // A=-2.44E+01, B=5.13E-01, C=-2.77E-04, D=4.91E-08
-  cpV_JmolK(T) {
-    const A=-2.44e+01, B=5.13e-01, C=-2.77e-04, D=4.91e-08;
+    const A = -5.45e+01,
+          B = 6.11e-01,
+          C = -2.52e-04,
+          D = 1.32e-08; // fixed
     return A + B*T + C*T**2 + D*T**3;
   }
 };
 
-//------------- 2) Convert T(°C) => Psat(bar) via Antoine -------------
+const decane = {
+  name: 'n-Decane',
+  A: 6.944,
+  B: 1495,
+  C: 193.9,
+  // Updated heat of vaporization
+  Hvap_kJmol: 51.3,  
+  // Liquid Cp (J/mol·K)
+  CpL_JmolK: 313,
+  cpV_JmolK(T) {
+    const A = -7.913,
+          B = 9.61e-01,
+          C = -5.29e-04,
+          D = 1.13e-07; // fixed
+    return A + B*T + C*T**2 + D*T**3;
+  }
+};
+
+//--------- 2) Antoine: T(°C) => Psat (bar) -----------
 function antoineBar(T_C, comp) {
   // log10(P_mmHg) = A - B/(T_C + C)
-  // 1 mmHg ~ 0.00133322 bar
-  const log10P = comp.A - comp.B/(T_C + comp.C);
+  const log10P = comp.A - comp.B / (T_C + comp.C);
   const p_mmHg = Math.pow(10, log10P);
-  return p_mmHg * 0.00133322;
+  return p_mmHg * 0.00133322;  // convert mmHg -> bar
 }
 
-//------------- 3) Solve for Vapor Fraction (Beta) -------------
-function solveVaporFraction(T_C, Pbar, z1) {
-  const K1 = antoineBar(T_C, benzene)/Pbar;
-  const K2 = antoineBar(T_C, toluene)/Pbar;
-  let betaLo=0, betaHi=1, beta=0.5;
-
-  for(let i=0; i<30; i++){
-    const fLo= rrFunc(z1, 1-z1, K1, K2, betaLo);
-    const fHi= rrFunc(z1, 1-z1, K1, K2, betaHi);
-    beta= 0.5*(betaLo + betaHi);
-    const fMid= rrFunc(z1, 1-z1, K1, K2, beta);
-
-    if(fLo*fMid<0) {
-      betaHi= beta;
-    } else {
-      betaLo= beta;
-    }
-    if(Math.abs(fMid)<1e-12) break;
+//--------- 3) Bubble & Dew Point Calculations -----------
+function bubblePoint(z1, Pbar) {
+  let T_low = 50, T_high = 300, T_mid;
+  for (let i = 0; i < 50; i++) {
+    T_mid = 0.5 * (T_low + T_high);
+    const f = z1 * antoineBar(T_mid, cyclohexane)
+            + (1 - z1) * antoineBar(T_mid, decane)
+            - Pbar;
+    if (Math.abs(f) < 1e-6) break;
+    if (f > 0) T_high = T_mid;
+    else T_low = T_mid;
   }
-  return { beta, K1, K2 };
+  return T_mid;
 }
 
-// Rachford–Rice function
-function rrFunc(z1, z2, K1, K2, beta){
-  const t1= z1*(K1-1)/(1+ beta*(K1-1));
-  const t2= z2*(K2-1)/(1+ beta*(K2-1));
-  return t1 + t2;
+function dewPoint(z1, Pbar) {
+  let T_low = 50, T_high = 300, T_mid;
+  for (let i = 0; i < 50; i++) {
+    T_mid = 0.5 * (T_low + T_high);
+    const f = z1 * (Pbar / antoineBar(T_mid, cyclohexane))
+            + (1 - z1) * (Pbar / antoineBar(T_mid, decane))
+            - 1;
+    if (Math.abs(f) < 1e-6) break;
+    if (f > 0) T_low = T_mid;
+    else T_high = T_mid;
+  }
+  return T_mid;
 }
 
-//------------- 4) Integrate Vapor Cp Polynomials -------------
-function getCoeffs(comp){
-  // We'll replicate the polynomial's A,B,C,D for indefinite integration
-  if(comp === benzene) {
-    return { A:-3.39e+01, B:4.74e-01, C:-3.02e-04, D:7.13e-08 };
+//--------- 4) Cp Integration for Vapor -----------
+function getCoeffs(comp) {
+  if (comp === cyclohexane) {
+    return { A: -5.45e+01, B: 6.11e-01, C: -2.52e-04, D: 1.32e-08 };
   } else {
-    return { A:-2.44e+01, B:5.13e-01, C:-2.77e-04, D:4.91e-08 };
+    return { A: -7.913, B: 9.61e-01, C: -5.29e-04, D: 1.13e-07 };
   }
 }
 
-// Indef integral => A*T + B/2*T^2 + C/3*T^3 + D/4*T^4
-function integrateCpV(comp, Tlo, Thi){
+function integrateCpV(comp, Tlo, Thi) {
   const c = getCoeffs(comp);
-  function iFunc(T) {
-    return (
-      c.A*T
-      + (c.B/2)*T*T
-      + (c.C/3)*T**3
-      + (c.D/4)*T**4
-    );
-  }
+  const iFunc = T => (
+    c.A * T +
+    (c.B / 2) * T**2 +
+    (c.C / 3) * T**3 +
+    (c.D / 4) * T**4
+  );
   return iFunc(Thi) - iFunc(Tlo);
 }
 
-//------------- 5) Enthalpy Calculations -------------
-function enthalpyLiquid(TK, x1){
-  // Weighted by x1, x2 => 1-x1
+//--------- 5) Enthalpy Calculations -----------
+function enthalpyLiquid(TK, x1) {
   const x2 = 1 - x1;
-  const Cp_mix = x1*benzene.CpL_JmolK + x2*toluene.CpL_JmolK;
-  const Tref= 298;  // K
-  return Cp_mix*(TK - Tref);  // J/mol
+  const Cp_mix = x1 * cyclohexane.CpL_JmolK + x2 * decane.CpL_JmolK;
+  const Tref = 298;
+  return Cp_mix * (TK - Tref);
 }
 
-function enthalpyVapor(TK, y1){
-  const y2= 1- y1;
-  const Tref= 298;
-
-  // benzene
-  const Hv_benz_J = benzene.Hvap_kJmol*1000; 
-  const iBenz = integrateCpV(benzene, Tref, TK);
-  const H_benz = Hv_benz_J + iBenz;
-
-  // toluene
-  const Hv_tol_J = toluene.Hvap_kJmol*1000;
-  const iTol = integrateCpV(toluene, Tref, TK);
-  const H_tol = Hv_tol_J + iTol;
-
-  return y1*H_benz + y2*H_tol;
+function enthalpyVapor(TK, y1) {
+  const y2 = 1 - y1;
+  const Tref = 298;
+  
+  const Hv_cy = cyclohexane.Hvap_kJmol * 1000;
+  const iCy = integrateCpV(cyclohexane, Tref, TK);
+  const H_cy = Hv_cy + iCy;
+  
+  const Hv_dec = decane.Hvap_kJmol * 1000;
+  const iDec = integrateCpV(decane, Tref, TK);
+  const H_dec = Hv_dec + iDec;
+  
+  return y1 * H_cy + y2 * H_dec;
 }
 
-// feed enthalpy for 10 moles
-function feedEnthalpy(T_C, z1, Pbar){
-  // We'll do an isothermal flash at (T_C,Pbar) to see if feed is partial, etc.
-  const eq= solveVaporFraction(T_C, Pbar, z1);
-  if(eq.beta<0){
-    // all liquid
-    return 10* enthalpyLiquid(T_C+273.15, z1);
-  } else if(eq.beta>1){
-    // all vapor
-    return 10* enthalpyVapor(T_C+273.15, z1);
+//--------- 6) Feed Enthalpy via Isobaric Path -----------
+function feedEnthalpyPath(T_C, z1, Pbar) {
+  const n = 10;
+  const T_feed_K = T_C + 273.15;
+  const T_ref = 298;
+  const T_b_C = bubblePoint(z1, Pbar);
+  const T_b_K = T_b_C + 273.15;
+  const T_d_C = dewPoint(z1, Pbar);
+  const T_d_K = T_d_C + 273.15;
+  
+  let H;
+  if (T_feed_K <= T_b_K) {
+    const Cp_mix = z1 * cyclohexane.CpL_JmolK + (1 - z1) * decane.CpL_JmolK;
+    H = n * Cp_mix * (T_feed_K - T_ref);
+  } else if (T_feed_K >= T_d_K) {
+    const Cp_liq = z1 * cyclohexane.CpL_JmolK + (1 - z1) * decane.CpL_JmolK;
+    const h_liq = Cp_liq * (T_b_K - T_ref);
+    
+    const latent_cy = cyclohexane.Hvap_kJmol * 1000
+                    + integrateCpV(cyclohexane, T_b_K, T_d_K)
+                    - cyclohexane.CpL_JmolK * (T_d_K - T_b_K);
+    const latent_dec = decane.Hvap_kJmol * 1000
+                     + integrateCpV(decane, T_b_K, T_d_K)
+                     - decane.CpL_JmolK * (T_d_K - T_b_K);
+    const latent_mix = z1 * latent_cy + (1 - z1) * latent_dec;
+    
+    const h_vap_heat = enthalpyVapor(T_feed_K, z1) - enthalpyVapor(T_d_K, z1);
+    H = n * (h_liq + latent_mix + h_vap_heat);
   } else {
-    // partial
-    const Lfrac= 1- eq.beta;
-    const denom= 1 + eq.beta*(eq.K1-1);
-    const x1= z1/ denom;
-    const y1= eq.K1*x1;
-    const hL= enthalpyLiquid(T_C+273.15, x1);
-    const hV= enthalpyVapor(T_C+273.15, y1);
-    return 10*(Lfrac*hL + eq.beta*hV);
+    const H_liq = enthalpyLiquid(T_b_K, z1);
+    const H_vap = enthalpyVapor(T_b_K, z1);
+    const frac = (T_feed_K - T_b_K) / (T_d_K - T_b_K);
+    const H_mix = H_liq + frac * (H_vap - H_liq);
+    H = n * H_mix;
+  }
+  return H;
+}
+
+//--------- 7) Adiabatic Flash Solver (No Rachford–Rice) -----------
+function adiabaticFlash(Tfeed_C, z1, Pbar) {
+  const n = 10;
+  const Tfeed_K = Tfeed_C + 273.15;
+  const T_b = bubblePoint(z1, Pbar);
+  const T_d = dewPoint(z1, Pbar);
+  const T_b_K = T_b + 273.15;
+  const T_d_K = T_d + 273.15;
+  const Hfeed = feedEnthalpyPath(Tfeed_C, z1, Pbar);
+
+  if (Tfeed_K <= T_b_K) {
+    return [Tfeed_C, z1, Pbar, n, 0, Tfeed_C, z1, z1];
+  } else if (Tfeed_K >= T_d_K) {
+    return [Tfeed_C, z1, Pbar, 0, n, Tfeed_C, z1, z1];
+  } else {
+    const T_flash_C = T_b;
+    const T_flash_K = T_flash_C + 273.15;
+    const H_liq_sat = enthalpyLiquid(T_flash_K, z1);
+    const H_vap_sat = enthalpyVapor(T_flash_K, z1);
+    
+    const beta = (Hfeed / n - H_liq_sat) / (H_vap_sat - H_liq_sat);
+    const L = n * (1 - beta);
+    const V = n * beta;
+    return [Tfeed_C, z1, Pbar, L, V, T_flash_C, z1, z1];
   }
 }
 
-//------------- 6) Adiabatic Flash Solver -------------
-function adiabaticFlash(Tfeed_C, z1, Pbar){
-  const Hfeed= feedEnthalpy(Tfeed_C, z1, Pbar);
+//--------- 8) Build Results Array -----------
+const T_MIN = 120, T_MAX = 300, T_STEP = 1;
+const Z_MIN = 0.0, Z_MAX = 1.0, Z_STEP = 0.01;
+const P_MIN = 0.25, P_MAX = 4.0, P_STEP = 0.25;
 
-  // bracket Tflash
-  let Tlow= Math.min(Tfeed_C, 0), Thigh= Math.max(Tfeed_C, 500);
-  let TflashC= 0.5*(Tlow + Thigh);
-
-  let L=0, V=0, x1=z1, y1=z1;
-
-  for(let i=0; i<30; i++){
-    const eq= solveVaporFraction(TflashC, Pbar, z1);
-    const Lfr= 1 - eq.beta;
-    const denom= 1 + eq.beta*(eq.K1 - 1);
-    const xf= z1/ denom;
-    const yf= eq.K1* xf;
-
-    const hL= enthalpyLiquid(TflashC+273.15, xf);
-    const hV= enthalpyVapor(TflashC+273.15, yf);
-    const Hout= 10*Lfr*hL + 10*eq.beta*hV;
-
-    const diff= Hout - Hfeed;
-    if(Math.abs(diff)<1e-2){
-      L= 10*Lfr; V= 10*eq.beta; x1= xf; y1= yf;
-      break;
-    }
-    if(diff>0){
-      Thigh= TflashC;
-    } else {
-      Tlow= TflashC;
-    }
-    TflashC= 0.5*(Tlow + Thigh);
-
-    if(i===29){
-      L= 10*Lfr; V= 10*eq.beta; x1= xf; y1= yf;
-    }
-  }
-
-  // clamp single-phase
-  if(V<0){
-    V=0; L=10; TflashC= Tfeed_C; x1=z1; y1=z1;
-  } else if(V>10){
-    V=10; L=0; TflashC= Tfeed_C; x1=z1; y1=z1;
-  }
-  // Return [Tfeed, z, P, L, V, Tflash, x1, y1]
-  return [ Tfeed_C, z1, Pbar, L, V, TflashC, x1, y1 ];
-}
-
-//------------- 7) Build Large Array ( T in 1°C steps ) -------------
-const T_MIN=120, T_MAX=300, T_STEP=1;        // 1°C increments
-const Z_MIN=0.0, Z_MAX=1.0,  Z_STEP=0.01;    // => 101 points
-const P_MIN=0.25, P_MAX=4.0, P_STEP=0.25;    // => 16 points
-
-const results=[];
-
-for(let T=T_MIN; T<=T_MAX+1e-9; T+=T_STEP){
-  const Tf= +T.toFixed(6);  // ensure consistent float
-  for(let z=Z_MIN; z<=Z_MAX+1e-9; z+=Z_STEP){
-    const zf= +z.toFixed(6);
-    for(let P=P_MIN; P<=P_MAX+1e-9; P+=P_STEP){
-      const Pf= +P.toFixed(6);
-
-      results.push( adiabaticFlash(Tf, zf, Pf) );
+const results = [];
+for (let T = T_MIN; T <= T_MAX + 1e-9; T += T_STEP) {
+  const Tf = +T.toFixed(6);
+  for (let z = Z_MIN; z <= Z_MAX + 1e-9; z += Z_STEP) {
+    const zf = +z.toFixed(6);
+    for (let P = P_MIN; P <= P_MAX + 1e-9; P += P_STEP) {
+      const Pf = +P.toFixed(6);
+      results.push(adiabaticFlash(Tf, zf, Pf));
     }
   }
 }
 
-//------------- 8) Old Solutions Multi-Line Format -------------
-function oldStyleFormat(rows){
-  let s= "[\n";
-  for(let i=0; i<rows.length; i++){
+function oldStyleFormat(rows) {
+  let s = "[\n";
+  for (let i = 0; i < rows.length; i++) {
     s += "\t[\n";
-    const row= rows[i];
-    for(let j=0; j<row.length; j++){
+    const row = rows[i];
+    for (let j = 0; j < row.length; j++) {
       s += "\t\t" + row[j];
-      if(j<row.length-1) s+=",";
+      if (j < row.length - 1) s += ",";
       s += "\n";
     }
-    s+=(i<rows.length-1) ? "\t],\n" : "\t]\n";
+    s += (i < rows.length - 1) ? "\t],\n" : "\t]\n";
   }
-  s+="]";
+  s += "]";
   return s;
 }
 
-// Final
-console.log("Constructed array with", results.length, "rows at 1°C steps for Benzene/Toluene!");
-const outStr= oldStyleFormat(results);
-fs.writeFileSync("benztol_solutions.json", outStr, "utf8");
-console.log("Done writing benztol_solutions.json!");
+console.log("Constructed array with", results.length, "rows for Cyclohexane/n-Decane (adiabatic, no R-R)!");
+const outStr = oldStyleFormat(results);
+fs.writeFileSync("cyclohex_decane_solutions.json", outStr, "utf8");
+console.log("Done writing cyclohex_decane_solutions.json!");

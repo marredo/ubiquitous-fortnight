@@ -72,7 +72,6 @@ window.g = {
             }
         }
     },
-    showCharts: false,
 }
 
 let solutionsA;
@@ -81,9 +80,9 @@ let solutionsC;
 let solutionsD;
 function preload(){
     solutionsA = loadJSON("solutions.json");
-    solutionsB = loadJSON("hexdec_solutions_oldstyle.json");
-    solutionsC = loadJSON("benztol_solutions_big.json");
-    solutionsD = loadJSON("cyclohex_decane_solutions_big.json");
+    solutionsB = loadJSON("hexoct_solutions_fixed.json");
+    solutionsC = loadJSON("benztol_solutions_fixed.json");
+    solutionsD = loadJSON("cyclohex_decane_solutions.json");
 }
 // Moles in feed
 mf = {
@@ -129,12 +128,8 @@ const temperatureLabel = document.getElementById("feed-temp-value");
 const moleFrac = document.getElementById("methanol-feed");
 const moleFracLabel = document.getElementById("methanol-feed-value");
 
-// Add event listener for GC button
-const gcButton = document.getElementById("gc-button");
-gcButton.addEventListener("click", function() {
-    g.showCharts = true;
-    redraw();
-});
+
+
 
 // Modify existing slider event listeners
 temperature.addEventListener("input", function(){
@@ -148,7 +143,6 @@ temperature.addEventListener("input", function(){
 moleFrac.addEventListener("input", function(){
     const temp = Number(moleFrac.value);
     g.moleFrac = temp;
-    g.showCharts = false;  // Hide charts on slider change
     moleFracLabel.innerHTML = `${temp}`;
     setTimeout(redraw(),2000);
 });
@@ -156,7 +150,6 @@ moleFrac.addEventListener("input", function(){
 pressure.addEventListener("input", function(){
     const temp = Number(pressure.value);
     g.P = temp;
-    g.showCharts = false;  // Hide charts on slider change
     pressureLabel.innerHTML = `${temp}`;
     setTimeout(redraw(),3000);
 });

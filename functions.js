@@ -116,56 +116,49 @@ function mathAndDisplay(){
     noStroke(); textSize(20);
     text(answers[2].toFixed(0)+'°C',width/2-20,height/2-15);
     
-    // Only show these if showCharts is true
-    if (g.showCharts) {
-        text('vapor = '+answers[1].toFixed(1)+' mol',348,60);
-        text('liquid = '+answers[0].toFixed(1)+' mol',348,ml.ty+85);
-        text(' = '+answers[4].toFixed(2),399,90);
-        text(' = '+answers[3].toFixed(2),395,ml.ty+115);
+    text('vapor = '+answers[1].toFixed(1)+' mol',348,60);
+    text('liquid = '+answers[0].toFixed(1)+' mol',348,ml.ty+85);
+    text(' = '+answers[4].toFixed(2),399,90);
+    text(' = '+answers[3].toFixed(2),395,ml.ty+115);
 
-        textStyle(ITALIC);
-        text('y',378,90);
-        text('x',375,ml.ty+115);
+    textStyle(ITALIC);
+    text('y',378,90);
+    text('x',375,ml.ty+115);
 
-        textStyle(NORMAL); textSize(16);
-        text('m',388,95);
-        text('m',385,ml.ty+120);
-        
-        // Draw the vapor flow rate text
-        fill(0, 100, 200);  
-        textStyle(BOLD);    
-        text('Outlet Vapor Molar Flow Rate = ' + (answers[1]/10 * 100).toFixed(1) + ' mol/h', mv.lx-45, mv.by+35);
-        text('Outlet Liquid Molar Flow Rate = ' + (answers[0]/10 * 100).toFixed(1) + ' mol/h', ml.lx-45, ml.by+35);
-    }
+    textStyle(NORMAL); textSize(16);
+    text('m',388,95);
+    text('m',385,ml.ty+120);
+    
+    // Draw the vapor flow rate text
+    fill(0, 100, 200);  
+    textStyle(BOLD);    
+    text('Outlet Vapor Molar Flow Rate = ' + (answers[1]/10 * 100).toFixed(1) + ' mol/h', mv.lx-45, mv.by+35);
+    text('Outlet Liquid Molar Flow Rate = ' + (answers[0]/10 * 100).toFixed(1) + ' mol/h', ml.lx-45, ml.by+35);
     pop();
 
-    // Only draw the charts if showCharts is true
-    if (g.showCharts) {
-        push();
-        strokeWeight(.5); fill(g.green);
-        rect(mv.lx+10,mv.by,60,map(answers[1]*answers[4],0,10,0,-95));
-        rect(ml.lx+10,ml.by,60,map(answers[0]*answers[3],0,10,0,-95));
-        fill(g.blue);
-        rect(mv.lx+80,mv.by,60,map(answers[1]*(1-answers[4]),0,10,0,-95));
-        rect(ml.lx+80,ml.by,60,map(answers[0]*(1-answers[3]),0,10,0,-95));
-        pop();
+    // Draw the charts
+    push();
+    strokeWeight(.5); fill(g.green);
+    rect(mv.lx+10,mv.by,60,map(answers[1]*answers[4],0,10,0,-95));
+    rect(ml.lx+10,ml.by,60,map(answers[0]*answers[3],0,10,0,-95));
+    fill(g.blue);
+    rect(mv.lx+80,mv.by,60,map(answers[1]*(1-answers[4]),0,10,0,-95));
+    rect(ml.lx+80,ml.by,60,map(answers[0]*(1-answers[3]),0,10,0,-95));
+    pop();
 
-        push();
-        noStroke(); textSize(18);
-        let t1 = answers[1]*(1-answers[4]);
-        if(t1 < 0) t1 = 0;
-        let t2 = answers[0]*(1-answers[3]);
-        if(t2 < 0) t2 = 0;
-        text((answers[1]*answers[4]).toFixed(1),mv.lx+26,mv.by+map(answers[1]*answers[4],0,10,0,-95)-5);
-        text(t1.toFixed(1),mv.lx+96,mv.by+map(answers[1]*(1-answers[4]),0,10,0,-95)-5);
-        text((answers[0]*answers[3]).toFixed(1),ml.lx+26,ml.by+map(answers[0]*answers[3],0,10,0,-95)-5);
-        text(t2.toFixed(1),ml.lx+96,ml.by+map(answers[0]*(1-answers[3]),0,10,0,-95)-5);
-        pop();
-    }
+    push();
+    noStroke(); textSize(18);
+    let t1 = answers[1]*(1-answers[4]);
+    if(t1 < 0) t1 = 0;
+    let t2 = answers[0]*(1-answers[3]);
+    if(t2 < 0) t2 = 0;
+    text((answers[1]*answers[4]).toFixed(1),mv.lx+26,mv.by+map(answers[1]*answers[4],0,10,0,-95)-5);
+    text(t1.toFixed(1),mv.lx+96,mv.by+map(answers[1]*(1-answers[4]),0,10,0,-95)-5);
+    text((answers[0]*answers[3]).toFixed(1),ml.lx+26,ml.by+map(answers[0]*answers[3],0,10,0,-95)-5);
+    text(t2.toFixed(1),ml.lx+96,ml.by+map(answers[0]*(1-answers[3]),0,10,0,-95)-5);
+    pop();
   }
-
 }
-
 
 function mathSolve(){
     const mixture = g.mixtures[mixtureSelect.value];
